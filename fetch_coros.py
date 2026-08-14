@@ -4,9 +4,10 @@
 Récupère la position live COROS côté serveur (GitHub Action) et écrit live.json.
 Aucune dépendance externe (stdlib uniquement).
 
-Env attendus :
-  COROS_ID  = valeur 'id'  du lien de partage COROS (.../share/sport-live?id=...&key=...)
-  COROS_KEY = valeur 'key' du lien de partage COROS
+Env attendus (au choix) :
+  COROS_SHARE_URL = le lien de partage COROS ENTIER (.../share/sport-live?id=...&key=...)
+                    -> le script en extrait 'id' et 'key' tout seul (le plus simple).
+  ou bien, à l'ancienne : COROS_ID + COROS_KEY séparément.
 
 Sortie : live.json = {"lat":..,"lon":..,"ts":..,"updated":..}
          ou {"status":"expired"} / {"status":"waiting"} selon l'état.
@@ -14,7 +15,7 @@ Sortie : live.json = {"lat":..,"lon":..,"ts":..,"updated":..}
 Ne fait jamais échouer le job (exit 0) : en cas de pépin réseau on n'écrit rien,
 le fichier précédent reste en place.
 """
-import os, sys, json, time, gzip
+import os, sys, json, time, gzip, re
 import urllib.request
 
 QHOST = "fastfloweu.coros.com"   # hôte EU / regionId=3 (adapter si autre région)
@@ -30,12 +31,27 @@ def write(obj):
         json.dump(obj, f, ensure_ascii=False)
     print("live.json ->", obj)
 
-def main():
+def resolve_credentials():
+    """id/key depuis COROS_SHARE_URL (lien entier) en priorité, sinon COROS_ID + COROS_KEY."""
+    url = os.environ.get("COROS_SHARE_URL", "").strip()
+    if url:
+        mi = re.search(r"[?&]id=([^&#]+)", url)
+        mk = re.search(r"[?&]key=([^&#]+)", url)
+        if mi and mk:
+            return mi.group(1), mk.group(1)
+        print("COROS_SHARE_URL fourni mais id/key introuvables dedans.", file=sys.stderr)
+        return None, None
     cid = os.environ.get("COROS_ID", "").strip()
     key = os.environ.get("COROS_KEY", "").strip()
+    return (cid or None), (key or None)
+
+
+def main():
+    cid, key = resolve_credentials()
     if not cid or not key:
-        print("COROS_ID / COROS_KEY manquants (secrets).", file=sys.stderr)
-        return  # exit 0 : rien à écrire
+        print("Identifiants COROS manquants : renseigne le secret COROS_SHARE_URL "
+              "(lien de partage complet) OU COROS_ID + COROS_KEY.", file=sys.stderr)
+        return  # exit 0 : rien a ecrire
 
     # 1) API de découverte : id+key -> métadonnées + URL du fichier de position .gz
     qurl = "https://%s/sport/live/query?id=%s&key=%s&t=%d" % (QHOST, cid, key, int(time.time()*1000))
