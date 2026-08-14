@@ -35,6 +35,7 @@ jobs:
 
       - name: Récupérer la position COROS
         env:
+          COROS_SHARE_URL: ${{ secrets.COROS_SHARE_URL }}
           COROS_ID: ${{ secrets.COROS_ID }}
           COROS_KEY: ${{ secrets.COROS_KEY }}
         run: python3 fetch_coros.py
