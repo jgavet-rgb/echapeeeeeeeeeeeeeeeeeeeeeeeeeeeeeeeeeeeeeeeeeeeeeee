@@ -98,7 +98,9 @@ def main():
     except Exception as e:
         print("parse point KO:", e, pts[-1], file=sys.stderr); return
 
-    write({"lat": round(lat, 6), "lon": round(lon, 6), "ts": ts, "updated": int(time.time())})
+    write({"lat": round(lat, 6), "lon": round(lon, 6), "ts": ts,
+           "start": int(float(tr.get("startTimestamp") or 0)) or None,
+           "updated": int(time.time())})
 
 if __name__ == "__main__":
     main()
