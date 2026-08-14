@@ -1,0 +1,55 @@
+# .github/workflows/coros-live.yml
+# Récupère la position live COROS toutes les ~5 min et publie live.json
+# sur la branche "live-data" (lue par la page via raw.githubusercontent.com).
+# 100 % GitHub — aucun service externe.
+#
+# Prérequis :
+#   - Secrets du dépôt : COROS_ID et COROS_KEY (Settings > Secrets and variables > Actions)
+#   - Le script fetch_coros.py à la racine du dépôt
+#
+# NB : le planificateur GitHub tourne au minimum toutes les 5 min et est souvent
+#      en retard de 5–15 min (parfois sauté). Suivi ~quasi-live, pas temps réel.
+
+name: COROS live position
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # toutes les 5 minutes
+  workflow_dispatch:          # + bouton "Run workflow" pour tester à la main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: coros-live
+  cancel-in-progress: false
+
+jobs:
+  fetch-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (branche principale, pour récupérer fetch_coros.py)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Récupérer la position COROS
+        env:
+          COROS_ID: ${{ secrets.COROS_ID }}
+          COROS_KEY: ${{ secrets.COROS_KEY }}
+        run: python3 fetch_coros.py
+
+      - name: Publier live.json sur la branche live-data (sans déclencher de rebuild Pages)
+        run: |
+          if [ ! -f live.json ]; then
+            echo "Pas de live.json produit (réseau ou pas de point) — on ne publie rien."
+            exit 0
+          fi
+          git config user.name  "coros-bot"
+          git config user.email "coros-bot@users.noreply.github.com"
+          # branche orpheline à fichier unique, réécrite à chaque passage (pas d'historique qui gonfle)
+          git checkout --orphan live-data
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          git add -f live.json
+          git commit -m "live position $(date -u +%FT%TZ)"
+          git push -f origin live-data
